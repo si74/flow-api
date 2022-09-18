@@ -64,5 +64,4 @@ I debated the structure of the flowList quite a bit and elected to create a gene
 ## TODO
 - tests for server 
 - metrics for flowdb
-- metrics for http server 
 - improve datastore efficiency 

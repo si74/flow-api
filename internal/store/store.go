@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 )
 
@@ -46,7 +47,7 @@ type FlowStore struct {
 }
 
 // NewFlowStore creates and returns a new flow store
-func NewFlowStore(ll *logrus.Logger) *FlowStore {
+func NewFlowStore(reg *prometheus.Registry, ll *logrus.Logger) *FlowStore {
 	return &FlowStore{
 		mu:      sync.RWMutex{},
 		flowMap: map[FlowKey]flowList{},

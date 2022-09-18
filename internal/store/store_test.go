@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sirupsen/logrus"
 )
 
@@ -93,7 +94,8 @@ func Test_Flow(t *testing.T) {
 			ll := logrus.New()
 			ll.SetOutput(io.Discard)
 
-			store := NewFlowStore(ll)
+			reg := prometheus.NewPedanticRegistry()
+			store := NewFlowStore(reg, ll)
 
 			if tt.insert != nil {
 				err := store.Insert(tt.insert)

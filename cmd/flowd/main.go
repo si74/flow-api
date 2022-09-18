@@ -36,7 +36,7 @@ func main() {
 		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)
 
-	srv, err := flowd.NewServer(addr, ll, reg)
+	srv, err := flowd.NewServer(addr, reg, ll)
 	if err != nil {
 		log.Fatalf("unable to create new flow server: %v", err)
 	}
