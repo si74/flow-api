@@ -46,10 +46,11 @@ type FlowStore struct {
 }
 
 // NewFlowStore creates and returns a new flow store
-func NewFlowStore() *FlowStore {
+func NewFlowStore(ll *logrus.Logger) *FlowStore {
 	return &FlowStore{
 		mu:      sync.RWMutex{},
 		flowMap: map[FlowKey]flowList{},
+		ll:      ll,
 	}
 }
 
@@ -71,10 +72,10 @@ func (fs *FlowStore) Insert(flows []*Flow) error {
 		}
 		err := flowList.insert(flow)
 		if err != nil {
-			// Log and continue
+			fs.ll.Errorf("unable to insert flow for %v: %v", key, err)
+			continue
 		}
 	}
-
 	return nil
 }
 
@@ -91,7 +92,7 @@ func (fs *FlowStore) Get(hour int) ([]*Flow, error) {
 	for key, list := range fs.flowMap {
 		flow, err := list.get(key, hour)
 		if err != nil {
-			// TODO(sneha): log
+			fs.ll.Errorf("unable to retrieve aggregate flow for %v: %v", key, err)
 			continue
 		}
 		// No data present
@@ -103,7 +104,7 @@ func (fs *FlowStore) Get(hour int) ([]*Flow, error) {
 	return flows, nil
 }
 
-// flowList is a generic interface which stores a linked list of flow data points and
+// flowList is a generic interface that accepts flow data points
 // returns aggregated flow data.
 // Implementations may vary in run-time complexity and efficiency.
 type flowList interface {

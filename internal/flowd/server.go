@@ -28,8 +28,7 @@ type Server struct {
 // TODO(sneha): add logging using logrus
 // TODO(enable go metrics)
 func NewServer(addr string, ll *logrus.Logger, reg *prometheus.Registry) (*Server, error) {
-
-	// Validate addr
+	// TODO(sneha): Validate addr
 
 	// Create a flow handler that contains the data structure
 
@@ -133,7 +132,7 @@ func (h *FlowHandler) handleWrite(w http.ResponseWriter, r *http.Request) {
 
 	// Confirm we are receiving a body type of json
 	if r.Header.Get("Content-Type") != "application/json" {
-		ll.Debug("invalid write request type: %v", r.Header.Get("Content-Type"))
+		ll.Debugf("invalid write request type: %v", r.Header.Get("Content-Type"))
 		w.WriteHeader(http.StatusUnsupportedMediaType)
 		return
 	}
@@ -143,13 +142,13 @@ func (h *FlowHandler) handleWrite(w http.ResponseWriter, r *http.Request) {
 	b, err := io.ReadAll(r.Body)
 	defer r.Body.Close()
 	if err != nil {
-		ll.Debug("unble to read write body: %v", err)
+		ll.Debugf("unble to read write body: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	if err = json.Unmarshal(b, &flowList); err != nil {
-		ll.Debug("unable to unmarshal write body into flows: %v", err)
+		ll.Debugf("unable to unmarshal write body into flows: %v", err)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}

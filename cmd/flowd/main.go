@@ -14,10 +14,10 @@ import (
 )
 
 func main() {
-	// TODO(make this configurable via a flag)
+	// TODO(sneha): make this configurable via a flag)
 	addr := ":8080"
 
-	// TODO make debug logging configurable
+	// TODO(sneha): make debug logging configurable
 
 	// Initiate prometheus
 	// Initiate logrus logger
