@@ -2,6 +2,8 @@ package store
 
 import (
 	"container/list"
+	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/sirupsen/logrus"
@@ -16,7 +18,7 @@ type Flow struct {
 	Dst     string `json:"dst_app"`
 	VpcID   string `json:"vpc_id"`
 	BytesTx int    `json:"bytes_tx"`
-	BytsRx  int    `json:"bytes_rx"`
+	BytesRx int    `json:"bytes_rx"`
 	Hour    int    `json:"hour"`
 }
 
@@ -33,11 +35,11 @@ type FlowKey struct {
 // FlowStore is a mapping of a linked list of flow data - keyed by a unique flow tuple
 type FlowStore struct {
 	mu sync.RWMutex
-	// a mapping of a uniquely identifying flow key to a doubly-linked list of flows
-	flowMap map[FlowKey]*FlowList
+	// a mapping of a uniquely identifying flow key to a generic flow list interface
+	flowMap map[FlowKey]flowList
 	// TODO(Sneha): make this configurable
-	//maxSize int
-	// retention
+	// maxSize int
+	// retention int
 	// TODO(sneha): add some metrics
 	// lastUpdated
 	ll *logrus.Logger
@@ -47,7 +49,7 @@ type FlowStore struct {
 func NewFlowStore() *FlowStore {
 	return &FlowStore{
 		mu:      sync.RWMutex{},
-		flowMap: map[FlowKey]*FlowList{},
+		flowMap: map[FlowKey]flowList{},
 	}
 }
 
@@ -64,7 +66,7 @@ func (fs *FlowStore) Insert(flows []*Flow) error {
 		}
 		flowList, ok := fs.flowMap[key]
 		if !ok {
-			flowList = &FlowList{l: list.New()}
+			flowList = &flowListV1{l: list.New()}
 			fs.flowMap[key] = flowList
 		}
 		err := flowList.insert(flow)
@@ -76,21 +78,88 @@ func (fs *FlowStore) Insert(flows []*Flow) error {
 	return nil
 }
 
-type FlowList struct {
-	l *list.List
-}
-
-// Insert inserts a flow for a current hour or sums values into existing flow entry
-// Note: For this case, it was unnecessary to store all input flow points separately if
-// they are for the same flow key and time window. In the future, this may change.
-func (fl *FlowList) insert(flow *Flow) error {
-
-	return nil
-}
-
 // Get returns an aggregation of flow stats for all tuples for a given hour
 func (fs *FlowStore) Get(hour int) ([]*Flow, error) {
 	fs.mu.RLock()
 	defer fs.mu.RUnlock()
-	return nil, nil
+
+	if hour <= 0 {
+		return nil, errors.New("timestamp must be greater than 0")
+	}
+
+	flows := []*Flow{}
+	for key, list := range fs.flowMap {
+		flow, err := list.get(key, hour)
+		if err != nil {
+			// TODO(sneha): log
+			continue
+		}
+		// No data present
+		if flow == nil {
+			continue
+		}
+		flows = append(flows, flow)
+	}
+	return flows, nil
+}
+
+// flowList is a generic interface which stores a linked list of flow data points and
+// returns aggregated flow data.
+// Implementations may vary in run-time complexity and efficiency.
+type flowList interface {
+	insert(flow *Flow) error
+	get(key FlowKey, hour int) (*Flow, error)
+}
+
+// flowListV1 is the less optimized flow list that inserts in any order and does a brute-force
+// aggregation of flow values.
+type flowListV1 struct {
+	l *list.List
+}
+
+// insert a new flow data point.
+// Note: The current iteration does not preserve chronological order, which makes insertion quite fast.
+// To improve aggregation speed in the future, chronological insertion or aggregation into a single flow on insert may be done.
+func (fl *flowListV1) insert(flow *Flow) error {
+	// Case when the list is currently empty and we can insert the flow
+	fl.l.PushBack(flow)
+	return nil
+}
+
+// get returns an aggregated for for a given tuple and hour timestamp
+func (fl *flowListV1) get(key FlowKey, hour int) (*Flow, error) {
+	if hour <= 0 {
+		return nil, fmt.Errorf("provided hour timestamp must be greater than 0")
+	}
+
+	var found bool
+	aggregateFlow := &Flow{
+		Src:     key.Src,
+		Dst:     key.Dst,
+		VpcID:   key.VpcID,
+		Hour:    hour,
+		BytesTx: 0,
+		BytesRx: 0,
+	}
+
+	for e := fl.l.Front(); e != nil; e = e.Next() {
+		flow, ok := e.Value.(*Flow)
+		if !ok {
+			e = e.Next()
+			continue
+		}
+
+		if flow.Hour == hour {
+			found = true
+			aggregateFlow.BytesRx += flow.BytesRx
+			aggregateFlow.BytesTx += flow.BytesTx
+		}
+	}
+
+	// This timestamp was never found, return a nil flow value
+	if !found {
+		return nil, nil
+	}
+
+	return aggregateFlow, nil
 }
