@@ -1,18 +1,23 @@
 # flow-api
 
-# Setup and Use
+## Setup and Use
 
-Download dependencies: 
+First, download the repo and get all dependencies:
+`git clone https://github.com/si74/flow-api`
 
 Run the service: 
 
+`make test`
 
+Insert flows into the database: 
 
-# Testing 
+`./cmd/flowd/test.sh`
+
+## Testing 
 
 Simply run `make test` to run unit tests. 
 
-# Design & Implementation 
+## Design & Implementation 
 
 flow-api is a flow aggregation surface with two key components: 
 
@@ -21,23 +26,24 @@ flow-api is a flow aggregation surface with two key components:
 This is a fairly standard structure which utilized the golang http package - the 
 server and the mux along with several handlers. Note the server handles context cancellations gracefully via the use of error groups. 
 
-I also added logging that was configurable and prometheus go metrics - alongside some custom http server and flow datastore metrics. 
+I also added logging that was configurable and prometheus Go metrics - alongside some custom http server and flow datastore metrics. 
 
 2. A flow datastore and aggregation package
 
-The main flow datastore structure utilized a thread-safe map of flow tuple identifier to a flowList structure. The flow tuple identifier consists of three values - the src app, the dst app, and the vpc ID. This map is acceptable if there is a limited subset of src, dst, and vpc options; however, if this were to be IP addresses instead of apps - for example - this would not be the ideal structure. 
+The main flow datastore structure utilized a thread-safe mapping of flow tuple identifiers to flowList structures. The flow tuple identifier consists of three values - the src app, the dst app, and the vpc ID. This map is acceptable if there is a limited subset of src, dst, and vpc options; however, if this were to be IP addresses instead of apps, there would be a significantly larger subset of identifiers and a map would not be ideal. 
 
 I debated the structure of the flowList quite a bit and elected to create a generic interface that would enable me to easily swap out implementations if I wanted to pursue more efficient structures. 
 
 - The first implementation - flowlistV1 - was a simple unordered doubly linked list of flow data points. While this made insertion quite fast, it made data aggregation significantly more time-intensive as it required full iteration through the entire list of flows (O(N)). 
 
-# Limitations and Next-Steps 
+## Limitations and Next-Steps 
 
 1. Datastore: 
 - The first thing I would look into is further optimizing the flow datastore. 
 - Improved flowList - ordered linked list 
 - Is there lock contention using a map? 
-- Move away from using map entirely and use some kind of in-memory time series database - best way to store multi-dimensional data.  
+- Move away from using map entirely and use some kind of in-memory time series database - best way to store multi-dimensional data. 
+// TODO(sneha): Figure this out
 - Move from a single service to a series of microservices and a more distributed architecture 
     - use some kind of 3rd party queue like kafka in between whatever is sampling network flows and our internal memory store to buffer and handle flow requests. Either an in-memory buffer queue or external one to handle burstiness.
 
@@ -55,10 +61,8 @@ I debated the structure of the flowList quite a bit and elected to create a gene
 - Load Testing
 - Dockerized Integration Testing 
 
-# TODO
-- tests for flow
+## TODO
 - tests for server 
-- integration tests 
 - metrics for flowdb
 - metrics for http server 
-- load tests
+- improve datastore efficiency 

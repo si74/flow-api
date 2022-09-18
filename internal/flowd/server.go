@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"net/http"
 	"strconv"
@@ -31,14 +30,13 @@ func NewServer(addr string, ll *logrus.Logger, reg *prometheus.Registry) (*Serve
 	// TODO(sneha): Validate addr
 
 	// Create a flow handler that contains the data structure
+	fs := store.NewFlowStore(ll)
 
 	return &Server{
 		addr: addr,
-		fh: &FlowHandler{
-			ll: ll,
-		},
-		ll:  ll,
-		reg: reg,
+		fh:   NewFlowHandler(fs, ll),
+		ll:   ll,
+		reg:  reg,
 	}, nil
 }
 
@@ -76,12 +74,16 @@ func (s *Server) Serve(ctx context.Context) error {
 }
 
 type FlowHandler struct {
-	// TODO(sneha): contains data store for flowlist
+	fs *store.FlowStore
 	// TODO(sneha): add custom metrics
 	ll *logrus.Logger
 }
 
-func NewFlowHandler() {
+func NewFlowHandler(fs *store.FlowStore, ll *logrus.Logger) *FlowHandler {
+	return &FlowHandler{
+		fs: fs,
+		ll: ll,
+	}
 }
 
 func (h *FlowHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -111,18 +113,31 @@ func (h *FlowHandler) handleRead(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+
 	// Check if hour is a valid int
 	hour, err := strconv.Atoi(str)
 	if err != nil {
-		ll.Debug("read request parameter hour is not an int")
+		ll.Debugf("read request parameter hour is not an int: %s", str)
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
 	ll.Debug("successful request read request")
+	flows, err := h.fs.Get(hour)
+	if err != nil {
+		ll.Debugf("unable to retrieve flows for hour %d: %v", hour, flows)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 
-	//TODO(sneha): retrieve aggregated information from flow store, marshal to json value, and return
-	fmt.Fprintf(w, "successful request for hour: %v", hour)
+	out, err := json.Marshal(flows)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		ll.Debugf("unable to marshal flows: %v", err)
+		return
+	}
+
+	w.Write(out)
 }
 
 // TODO(sneha): Switch from write error to http.Error()
@@ -153,6 +168,11 @@ func (h *FlowHandler) handleWrite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO(sneha): add to flow store database and indicate successful
-	fmt.Fprintf(w, "received flows: %v", flowList)
+	if err := h.fs.Insert(flowList); err != nil {
+		ll.Debugf("unable to insert flows: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
 }

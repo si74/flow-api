@@ -7,5 +7,8 @@ run:
 staticcheck: 
 	staticcheck ./...
 
+lint: 
+	golint -set_exit_status $(PWD)/cmd/... $(PWD)/internal/...
 
-.PHONY: staticcheck test run
+
+.PHONY: staticcheck test run lint

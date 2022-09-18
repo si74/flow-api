@@ -15,7 +15,7 @@ type Flow struct {
 	// Src is the source application name
 	Src string `json:"src_app"`
 	// Dst is the destination application name
-	Dst     string `json:"dst_app"`
+	Dst     string `json:"dest_app"`
 	VpcID   string `json:"vpc_id"`
 	BytesTx int    `json:"bytes_tx"`
 	BytesRx int    `json:"bytes_rx"`
