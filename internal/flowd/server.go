@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -90,15 +91,19 @@ func (h *FlowHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	ll := h.ll.WithField("src", r.RemoteAddr)
 	ll.Debug("incoming request")
 
+	// TODO(sneha): Using a custom response writer will let us get a more accurate
+	// histogram duration metric.
+	start := time.Now()
 	switch r.Method {
 	case "GET":
 		h.handleRead(w, r)
 	case "POST":
 		h.handleWrite(w, r)
 	default:
-		// Invalid request type
 		h.ll.Debugf("invalid request type %s", r.Method)
+		duration := time.Since(start)
 		h.mm.requests.WithLabelValues("flows", r.Method, strconv.Itoa(http.StatusBadRequest)).Inc()
+		h.mm.requestDuration.WithLabelValues("flows", r.Method, strconv.Itoa(http.StatusBadRequest)).Observe(duration.Seconds())
 		w.WriteHeader(http.StatusBadRequest)
 	}
 }
@@ -107,10 +112,14 @@ func (h *FlowHandler) handleRead(w http.ResponseWriter, r *http.Request) {
 	ll := h.ll.WithField("src", r.RemoteAddr)
 	ll.Debug("incoming read request")
 
+	start := time.Now()
+
 	str := r.URL.Query().Get("hour")
 	if str == "" {
 		ll.Debug("read request missing parameter hour")
 		h.mm.requests.WithLabelValues("flows", r.Method, strconv.Itoa(http.StatusBadRequest)).Inc()
+		duration := time.Since(start)
+		h.mm.requestDuration.WithLabelValues("flows", r.Method, strconv.Itoa(http.StatusBadRequest)).Observe(duration.Seconds())
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -120,6 +129,8 @@ func (h *FlowHandler) handleRead(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		ll.Debugf("read request parameter hour is not an int: %s", str)
 		h.mm.requests.WithLabelValues("flows", r.Method, strconv.Itoa(http.StatusBadRequest)).Inc()
+		duration := time.Since(start)
+		h.mm.requestDuration.WithLabelValues("flows", r.Method, strconv.Itoa(http.StatusBadRequest)).Observe(duration.Seconds())
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
@@ -129,6 +140,8 @@ func (h *FlowHandler) handleRead(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		ll.Debugf("unable to retrieve flows for hour %d: %v", hour, flows)
 		h.mm.requests.WithLabelValues("flows", r.Method, strconv.Itoa(http.StatusInternalServerError)).Inc()
+		duration := time.Since(start)
+		h.mm.requestDuration.WithLabelValues("type", r.Method, strconv.Itoa(http.StatusBadRequest)).Observe(duration.Seconds())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -137,10 +150,14 @@ func (h *FlowHandler) handleRead(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		ll.Debugf("unable to marshal flows: %v", err)
 		h.mm.requests.WithLabelValues("flows", r.Method, strconv.Itoa(http.StatusInternalServerError)).Inc()
+		duration := time.Since(start)
+		h.mm.requestDuration.WithLabelValues("flows", r.Method, strconv.Itoa(http.StatusInternalServerError)).Observe(duration.Seconds())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
+	duration := time.Since(start)
+	h.mm.requestDuration.WithLabelValues("flows", r.Method, strconv.Itoa(http.StatusOK)).Observe(duration.Seconds())
 	h.mm.requests.WithLabelValues("flows", r.Method, strconv.Itoa(http.StatusOK)).Inc()
 	w.Write(out)
 }
@@ -150,10 +167,14 @@ func (h *FlowHandler) handleWrite(w http.ResponseWriter, r *http.Request) {
 	ll := h.ll.WithField("src", r.RemoteAddr)
 	ll.Debug("incoming write request")
 
+	start := time.Now()
+
 	// Confirm we are receiving a body type of json
 	if r.Header.Get("Content-Type") != "application/json" {
 		ll.Debugf("invalid write request type: %v", r.Header.Get("Content-Type"))
 		h.mm.requests.WithLabelValues("flows", r.Method, strconv.Itoa(http.StatusUnsupportedMediaType)).Inc()
+		duration := time.Since(start)
+		h.mm.requestDuration.WithLabelValues("flows", r.Method, strconv.Itoa(http.StatusUnsupportedMediaType)).Observe(duration.Seconds())
 		w.WriteHeader(http.StatusUnsupportedMediaType)
 		return
 	}
@@ -166,6 +187,8 @@ func (h *FlowHandler) handleWrite(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		ll.Debugf("unble to read write body: %v", err)
 		h.mm.requests.WithLabelValues("flows", r.Method, strconv.Itoa(http.StatusInternalServerError)).Inc()
+		duration := time.Since(start)
+		h.mm.requestDuration.WithLabelValues("flows", r.Method, strconv.Itoa(http.StatusInternalServerError)).Observe(duration.Seconds())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -173,6 +196,8 @@ func (h *FlowHandler) handleWrite(w http.ResponseWriter, r *http.Request) {
 	if err = json.Unmarshal(b, &flowList); err != nil {
 		ll.Debugf("unable to unmarshal write body into flows: %v", err)
 		h.mm.requests.WithLabelValues("flows", r.Method, strconv.Itoa(http.StatusInternalServerError)).Inc()
+		duration := time.Since(start)
+		h.mm.requestDuration.WithLabelValues("flows", r.Method, strconv.Itoa(http.StatusInternalServerError)).Observe(duration.Seconds())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
@@ -180,10 +205,14 @@ func (h *FlowHandler) handleWrite(w http.ResponseWriter, r *http.Request) {
 	if err := h.fs.Insert(flowList); err != nil {
 		ll.Debugf("unable to insert flows: %v", err)
 		h.mm.requests.WithLabelValues("flows", r.Method, strconv.Itoa(http.StatusInternalServerError)).Inc()
+		duration := time.Since(start)
+		h.mm.requestDuration.WithLabelValues("flows", r.Method, strconv.Itoa(http.StatusInternalServerError)).Observe(duration.Seconds())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
 	h.mm.requests.WithLabelValues("flows", r.Method, strconv.Itoa(http.StatusOK)).Inc()
+	duration := time.Since(start)
+	h.mm.requestDuration.WithLabelValues("flows", r.Method, strconv.Itoa(http.StatusOK)).Observe(duration.Seconds())
 	w.WriteHeader(http.StatusOK)
 }
