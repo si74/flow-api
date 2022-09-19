@@ -38,12 +38,8 @@ type FlowStore struct {
 	mu sync.RWMutex
 	// a mapping of a uniquely identifying flow key to a generic flow list interface
 	flowMap map[FlowKey]flowList
-	// TODO(Sneha): make this configurable
-	// maxSize int
-	// retention int
-	// TODO(sneha): add some metrics
-	// lastUpdated
-	ll *logrus.Logger
+	mm      *Metrics
+	ll      *logrus.Logger
 }
 
 // NewFlowStore creates and returns a new flow store
@@ -51,6 +47,7 @@ func NewFlowStore(reg *prometheus.Registry, ll *logrus.Logger) *FlowStore {
 	return &FlowStore{
 		mu:      sync.RWMutex{},
 		flowMap: map[FlowKey]flowList{},
+		mm:      NewMetrics(reg),
 		ll:      ll,
 	}
 }
@@ -76,6 +73,7 @@ func (fs *FlowStore) Insert(flows []*Flow) error {
 			fs.ll.Errorf("unable to insert flow for %v: %v", key, err)
 			continue
 		}
+		fs.mm.flows.Inc()
 	}
 	return nil
 }
@@ -104,6 +102,9 @@ func (fs *FlowStore) Get(hour int) ([]*Flow, error) {
 	}
 	return flows, nil
 }
+
+// TODO(sneha): create a Purge function that runs on an interval and purges the flowstore of records older than a
+// configured retention period. The purge function will also decrement the flow count metric
 
 // flowList is a generic interface that accepts flow data points
 // returns aggregated flow data.

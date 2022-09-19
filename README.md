@@ -80,5 +80,4 @@ flow-api is a flow aggregation surface with two key components:
 ## TODO
 
 - tests for server 
-- metrics for flowdb
 - improve datastore efficiency 
